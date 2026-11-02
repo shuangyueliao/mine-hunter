@@ -2,11 +2,11 @@
 
 ## Short description (CrazyGames / GameDistribution / itch.io)
 
-Neon minesweeper with a guaranteed-safe first click. Dig through Rookie,
-Scout and Veteran fields, flag what you fear, and race your best time.
-Classic logic, zero luck at the start. How fast can you clear the field?
+Neon minesweeper with a guaranteed-safe first click. Clear Rookie, Scout and
+Veteran fields, flag what you fear, and race your best time. How fast can you
+clear the field?
 
-(183 characters)
+(171 characters)
 
 ## Details
 
