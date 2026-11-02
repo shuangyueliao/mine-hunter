@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="Mine Hunter — neon minesweeper with 3 difficulties, safe first click and best times. Free single-file HTML5 puzzle game.">
+<title>Mine Hunter</title>
+<script>
+// 平台 SDK 按域名条件加载（独立运行时完全不加载，游戏行为不变）
+(function () {
+  var host = location.hostname || "";
+  try {
+    if (host.indexOf("crazygames") !== -1) {
+      var s1 = document.createElement("script");
+      s1.src = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+      s1.onload = function () {
+        if (window.CrazyGames && window.CrazyGames.SDK) {
+          window.CrazyGames.SDK.init().then(function () {
+            try { window.CrazyGames.SDK.game.loadingStart(); } catch (e) {}
+            window.addEventListener("load", function () { try { window.CrazyGames.SDK.game.loadingStop(); } catch (e) {} });
+          }).catch(function () {});
+        }
+      };
+      document.head.appendChild(s1);
+      window.__portal = "crazygames";
+    } else if (host.indexOf("gamedistribution") !== -1 || host.indexOf("html5.gamedistribution.com") !== -1 || host.indexOf("gd.games") !== -1) {
+      var s2 = document.createElement("script");
+      s2.src = "https://sdk.gamedistribution.com/v2/main.min.js";
+      document.head.appendChild(s2);
+      window.__portal = "gamedistribution";
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: #07080f; font-family: -apple-system, "Segoe UI", sans-serif; }
+  #wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; }
+  #hud { width: 100%; max-width: 520px; display: flex; justify-content: space-between; align-items: center; padding: 8px 14px 2px; color: #e8e8f2; }
+  .stat { text-align: center; min-width: 64px; }
+  .stat .label { font-size: 10px; color: #7d84ad; letter-spacing: 1px; }
+  .stat .val { font-size: 20px; font-weight: 800; }
+  #title { font-size: 14px; font-weight: 800; color: #6ee7ff; letter-spacing: 3px; text-shadow: 0 0 12px rgba(110,231,255,.55); }
+  #toolbar { width: 100%; max-width: 520px; display: flex; justify-content: center; align-items: center; gap: 6px; padding: 6px 10px; flex-wrap: wrap; }
+  #toolbar button { background: #141a30; color: #9aa3cf; border: 1px solid #2a3358; border-radius: 9px; padding: 6px 10px; font-size: 11px; font-weight: 700; letter-spacing: .5px; cursor: pointer; font-family: inherit; }
+  #toolbar button:active { transform: scale(.95); }
+  .diffBtn.active { color: #0a0c18; background: linear-gradient(135deg, #6ee7ff, #7b8cff); border-color: transparent; }
+  #modeBtn.digMode { color: #6ee7ff; border-color: #1e5a6e; }
+  #modeBtn.flagMode { color: #ff5ec8; border-color: #6e1e56; }
+  #muteBtn.off { color: #565c78; text-decoration: line-through; }
+  #boardwrap { position: relative; }
+  canvas { display: block; border-radius: 12px; touch-action: none; box-shadow: 0 0 26px rgba(80,120,255,.22), 0 0 0 1px #232b52; }
+  #overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(5,6,14,.78); backdrop-filter: blur(3px); z-index: 5; border-radius: 12px; }
+  #panel { background: #12162c; border: 1px solid #2c3562; border-radius: 18px; padding: 24px 30px; text-align: center; color: #fff; max-width: 86%; }
+  #panel h2 { font-size: 22px; margin-bottom: 8px; letter-spacing: 1px; }
+  #panel h2.win { color: #6ee7ff; text-shadow: 0 0 14px rgba(110,231,255,.6); }
+  #panel h2.lose { color: #ff5470; text-shadow: 0 0 14px rgba(255,84,112,.6); }
+  #panel p { color: #9aa3cf; font-size: 12.5px; line-height: 1.55; margin-bottom: 14px; }
+  #panel .final { font-size: 32px; font-weight: 900; color: #ffd76a; margin-bottom: 8px; }
+  #panel #ovBest { color: #ffd76a; font-size: 13px; font-weight: 700; margin-bottom: 14px; letter-spacing: 1px; }
+  #panel #ovBest.newbest { color: #6dff9e; text-shadow: 0 0 10px rgba(109,255,158,.6); }
+  #mainBtn { background: linear-gradient(135deg, #6ee7ff, #7b8cff); color: #0a0c18; border: none; border-radius: 12px; padding: 12px 34px; font-size: 15px; font-weight: 800; letter-spacing: 1px; cursor: pointer; font-family: inherit; }
+  #mainBtn:active { transform: scale(.96); }
+  #footer { color: #4d5370; font-size: 11px; padding: 6px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="stat"><div class="label">MINES</div><div class="val" id="mines">10</div></div>
+    <div id="title">MINE HUNTER</div>
+    <div class="stat"><div class="label">TIME</div><div class="val" id="time">0</div></div>
+    <div class="stat"><div class="label">BEST</div><div class="val" id="best">&mdash;</div></div>
+  </div>
+  <div id="toolbar">
+    <button class="diffBtn active" data-d="rookie" title="9x9, 10 mines">ROOKIE</button>
+    <button class="diffBtn" data-d="scout" title="12x12, 24 mines">SCOUT</button>
+    <button class="diffBtn" data-d="veteran" title="16x16, 40 mines">VETERAN</button>
+    <button id="modeBtn" class="digMode" title="Tap action: dig or flag">DIG</button>
+    <button id="muteBtn" title="Toggle sound">SOUND</button>
+  </div>
+  <div id="boardwrap">
+    <canvas id="game"></canvas>
+    <div id="overlay"><div id="panel">
+      <h2 id="ovTitle">MINE HUNTER</h2>
+      <p id="ovText">Clear every safe tile. Long-press or right-click to flag. Double-tap a number to open its neighbors. First click is always safe.</p>
+      <div class="final" id="finalTime" style="display:none">0s</div>
+      <div id="ovBest" style="display:none"></div>
+      <button id="mainBtn">START</button>
+    </div></div>
+  </div>
+  <div id="footer">Mine Hunter &mdash; a free puzzle game</div>
+</div>
+<script>
+"use strict";
+// ---------- 难度与常量 ----------
+var DIFFS = {
+  rookie:  { cols: 9,  rows: 9,  mines: 10 },
+  scout:   { cols: 12, rows: 12, mines: 24 },
+  veteran: { cols: 16, rows: 16, mines: 40 }
+};
+var NUM_COLORS = ["", "#55b6ff", "#5ee08a", "#ff6b6b", "#c08bff", "#ffc46b", "#4be3d2", "#ff8ae0", "#ffffff"];
+var LONG_PRESS_MS = 350;    // 移动端长按插旗判定
+var DBL_TAP_MS = 320;       // 双击/双触数字和弦判定
+var SWIPE_CANCEL_PX = 12;   // 手指移动超过该距离则取消长按（防手势冲突）
+
+// ---------- 核心逻辑（纯函数，与 DOM 解耦，可独立单测） __CORE_START__
+function makeBoard(n) {
+  var b = [];
+  for (var i = 0; i < n; i++) b.push({ mine: false, adj: 0, revealed: false, flagged: false, boom: false, wrong: false, anim: 0, delay: 0 });
+  return b;
+}
+function neighborsOf(idx, cols, rows) {
+  var out = [];
+  var c = idx % cols, r = (idx / cols) | 0;
+  for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+    if (dr === 0 && dc === 0) continue;
+    var c2 = c + dc, r2 = r + dr;
+    if (c2 < 0 || c2 >= cols || r2 < 0 || r2 >= rows) continue;
+    out.push(r2 * cols + c2);
+  }
+  return out;
+}
+// 布雷：雷不落在 safeIdx 及其邻域（首点保证安全），返回实际布雷数
+function placeMines(board, cols, rows, mines, safeIdx) {
+  var n = cols * rows;
+  var forbidden = {};
+  forbidden[safeIdx] = 1;
+  var nbs = neighborsOf(safeIdx, cols, rows);
+  for (var i = 0; i < nbs.length; i++) forbidden[nbs[i]] = 1;
+  var pool = [];
+  for (var j = 0; j < n; j++) if (!forbidden[j]) pool.push(j);
+  // Fisher-Yates 洗牌
+  for (var k = pool.length - 1; k > 0; k--) {
+    var m = (Math.random() * (k + 1)) | 0;
+    var t = pool[k]; pool[k] = pool[m]; pool[m] = t;
+  }
+  var count = Math.min(mines, pool.length);
+  for (var q = 0; q < count; q++) board[pool[q]].mine = true;
+  return count;
+}
+function computeAdj(board, cols, rows) {
+  var n = cols * rows;
+  for (var i = 0; i < n; i++) {
+    var cell = board[i];
+    if (cell.mine) continue;
+    var cnt = 0, nbs = neighborsOf(i, cols, rows);
+    for (var k = 0; k < nbs.length; k++) if (board[nbs[k]].mine) cnt++;
+    cell.adj = cnt;
+  }
+}
+// BFS 泛洪翻开：零格向外展开到数字边界；返回本次新翻开的下标数组
+function floodReveal(board, cols, rows, idx) {
+  var start = board[idx];
+  if (!start || start.revealed || start.flagged || start.mine) return [];
+  var out = [idx];
+  var queue = [idx];
+  start.revealed = true;
+  start.anim = 1;
+  while (queue.length) {
+    var cur = queue.shift();
+    if (board[cur].adj !== 0) continue;
+    var nbs = neighborsOf(cur, cols, rows);
+    for (var i = 0; i < nbs.length; i++) {
+      var nb = board[nbs[i]];
+      if (nb.revealed || nb.flagged || nb.mine) continue;
+      nb.revealed = true;
+      nb.anim = 1;
+      out.push(nbs[i]);
+      queue.push(nbs[i]);
+    }
+  }
+  return out;
+}
+// 和弦（双击数字）：旗数匹配时翻开其余邻格，返回踩雷下标或 -1
+function chordCell(board, cols, rows, idx) {
+  var cell = board[idx];
+  if (!cell || !cell.revealed || cell.adj === 0) return -1;
+  var nbs = neighborsOf(idx, cols, rows);
+  var flags = 0;
+  for (var i = 0; i < nbs.length; i++) if (board[nbs[i]].flagged) flags++;
+  if (flags !== cell.adj) return -1;
+  var hit = -1;
+  for (var j = 0; j < nbs.length; j++) {
+    var nb = board[nbs[j]];
+    if (nb.flagged || nb.revealed) continue;
+    if (nb.mine) { nb.revealed = true; nb.anim = 1; hit = nbs[j]; }
+    else floodReveal(board, cols, rows, nbs[j]);
+  }
+  return hit;
+}
+// 胜利判定：全部非雷格都已翻开
+function isWin(board) {
+  for (var i = 0; i < board.length; i++) {
+    if (!board[i].mine && !board[i].revealed) return false;
+  }
+  return true;
+}
+// __CORE_END__
+
+// ---------- DOM 与状态 ----------
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
+var overlayEl = document.getElementById("overlay");
+var minesEl = document.getElementById("mines");
+var timeEl = document.getElementById("time");
+var bestEl = document.getElementById("best");
+var ovTitle = document.getElementById("ovTitle");
+var ovText = document.getElementById("ovText");
+var finalTime = document.getElementById("finalTime");
+var ovBest = document.getElementById("ovBest");
+var mainBtn = document.getElementById("mainBtn");
+var modeBtn = document.getElementById("modeBtn");
+var muteBtn = document.getElementById("muteBtn");
+
+var state = "PLAY";      // PLAY | WIN | LOSE
+var diff = "rookie";
+var board = [], cols = 9, rows = 9, totalMines = 10;
+var placed = false, flagsUsed = 0;
+var timerOn = false, startT = 0, shownSec = 0;
+var mode = "dig";        // dig | flag
+var muted = false;
+var bests = { rookie: 0, scout: 0, veteran: 0 }; // 0 = 无记录
+var hoverIdx = -1;
+var particles = [];
+var pendingOverlay = null;
+var CELL = 32, VW = 288, VH = 288;
+
+// ---------- localStorage（全部 try/catch 包裹） ----------
+function loadBests() {
+  for (var k in bests) {
+    try {
+      var v = parseInt(localStorage.getItem("mh_best_" + k) || "0", 10);
+      if (isFinite(v) && v > 0) bests[k] = v;
+    } catch (e) {}
+  }
+  try { muted = localStorage.getItem("mh_muted") === "1"; } catch (e) {}
+}
+function saveBest(k, sec) { try { localStorage.setItem("mh_best_" + k, String(sec)); } catch (e) {} }
+function saveMuted() { try { localStorage.setItem("mh_muted", muted ? "1" : "0"); } catch (e) {} }
+
+// ---------- 音效（WebAudio 程序化合成） ----------
+var actx = null;
+function ensureAudio() {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+  } catch (e) {}
+}
+function beep(freq, dur, type, gainv) {
+  if (muted) return;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(gainv || 0.1, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch (e) {}
+}
+function boomSound() {
+  if (muted) return;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(150, actx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(28, actx.currentTime + 0.55);
+    g.gain.setValueAtTime(0.2, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.6);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + 0.62);
+  } catch (e) {}
+}
+function winSound() {
+  beep(523, 0.12, "triangle", 0.1);
+  setTimeout(function () { beep(659, 0.12, "triangle", 0.1); }, 130);
+  setTimeout(function () { beep(784, 0.1, "triangle", 0.1); }, 260);
+  setTimeout(function () { beep(1046, 0.25, "triangle", 0.12); }, 390);
+}
+
+// ---------- 平台埋点（SDK 已做域名守卫，其他域为空操作） ----------
+function cgGameplayStart() {
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStart();
+    }
+  } catch (e) {}
+}
+function cgGameplayStop() {
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStop();
+    }
+  } catch (e) {}
+}
+function cgHappy() {
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.happytime();
+    }
+  } catch (e) {}
+}
+
+// ---------- 自适应布局 ----------
+function layout() {
+  var hudH = document.getElementById("hud").offsetHeight;
+  var barH = document.getElementById("toolbar").offsetHeight;
+  var footH = document.getElementById("footer").offsetHeight;
+  var availW = Math.min(window.innerWidth - 18, 540);
+  var availH = window.innerHeight - hudH - barH - footH - 22;
+  var size = Math.max(180, Math.min(availW, availH));
+  CELL = size / cols;
+  VW = CELL * cols;
+  VH = CELL * rows;
+  canvas.width = Math.round(VW * dpr);
+  canvas.height = Math.round(VH * dpr);
+  canvas.style.width = VW + "px";
+  canvas.style.height = VH + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", layout);
+window.addEventListener("orientationchange", function () { setTimeout(layout, 120); });
+
+// ---------- HUD ----------
+function fmtBest(sec) { return sec > 0 ? sec + "s" : "\u2014"; }
+function updateMinesHUD() { minesEl.textContent = String(totalMines - flagsUsed); }
+function updateBestHUD() { bestEl.textContent = fmtBest(bests[diff]); }
+function updateTimeHUD(sec) { timeEl.textContent = String(sec); }
+
+// ---------- 游戏流程 ----------
+function newGame() {
+  if (pendingOverlay) { clearTimeout(pendingOverlay); pendingOverlay = null; }
+  var d = DIFFS[diff];
+  cols = d.cols; rows = d.rows; totalMines = d.mines;
+  board = makeBoard(cols * rows);
+  placed = false; flagsUsed = 0;
+  state = "PLAY";
+  timerOn = false; shownSec = 0;
+  hoverIdx = -1; particles = [];
+  layout();
+  updateMinesHUD(); updateTimeHUD(0); updateBestHUD();
+  overlayEl.style.display = "none";
+}
+function showOverlay(kind, sec, newBest) {
+  finalTime.style.display = kind === "start" ? "none" : "block";
+  ovBest.style.display = kind === "win" ? "block" : "none";
+  ovTitle.className = kind === "win" ? "win" : kind === "lose" ? "lose" : "";
+  mainBtn.textContent = kind === "start" ? "START" : kind === "win" ? "PLAY AGAIN" : "TRY AGAIN";
+  if (kind === "start") {
+    ovTitle.textContent = "MINE HUNTER";
+    ovText.textContent = "Clear every safe tile. Long-press or right-click to flag. Double-tap a number to open its neighbors. First click is always safe.";
+  } else if (kind === "win") {
+    ovTitle.textContent = "FIELD CLEARED!";
+    ovText.textContent = "All " + totalMines + " mines located.";
+    finalTime.textContent = sec + "s";
+    ovBest.textContent = newBest ? "NEW BEST TIME!" : "BEST " + fmtBest(bests[diff]);
+    ovBest.className = newBest ? "newbest" : "";
+  } else {
+    ovTitle.textContent = "BOOM!";
+    ovText.textContent = "You hit a mine. Red crosses mark wrong flags.";
+    finalTime.textContent = sec + "s";
+  }
+  overlayEl.style.display = "flex";
+}
+function startTimer() {
+  timerOn = true;
+  startT = Date.now();
+  shownSec = 0;
+  updateTimeHUD(0);
+}
+
+function primaryReveal(idx) {
+  var cell = board[idx];
+  if (!cell || cell.revealed || cell.flagged) return;
+  if (!placed) {
+    // 首次点击才布雷：首点及其邻域保证无雷
+    placeMines(board, cols, rows, totalMines, idx);
+    computeAdj(board, cols, rows);
+    placed = true;
+    startTimer();
+    cgGameplayStart();
+  }
+  if (cell.mine) { lose(idx); return; }
+  var opened = floodReveal(board, cols, rows, idx);
+  if (opened.length) {
+    for (var i = 0; i < opened.length; i += opened.length > 60 ? 3 : 1) {
+      var oc = board[opened[i]];
+      addParticle(opened[i], NUM_COLORS[oc.adj] || "#6ee7ff", 1);
+    }
+    beep(340 + Math.min(opened.length, 14) * 16, 0.06, "sine", 0.07);
+    if (isWin(board)) win();
+  }
+}
+function toggleFlag(idx) {
+  var cell = board[idx];
+  if (!cell || cell.revealed || state !== "PLAY") return;
+  cell.flagged = !cell.flagged;
+  cell.anim = cell.flagged ? 1 : 0;
+  flagsUsed += cell.flagged ? 1 : -1;
+  updateMinesHUD();
+  beep(cell.flagged ? 520 : 300, 0.06, "square", 0.06);
+}
+function doChord(idx) {
+  if (!placed) return;
+  var cell = board[idx];
+  if (!cell || !cell.revealed || cell.adj === 0) return;
+  var hit = chordCell(board, cols, rows, idx);
+  if (hit >= 0) { lose(hit); return; }
+  beep(430, 0.07, "triangle", 0.08);
+  if (isWin(board)) win();
+}
+function lose(hitIdx) {
+  state = "LOSE";
+  timerOn = false;
+  cgGameplayStop();
+  var hc = hitIdx % cols, hr = (hitIdx / cols) | 0;
+  board[hitIdx].boom = true;
+  board[hitIdx].revealed = true;
+  board[hitIdx].anim = 1;
+  for (var i = 0; i < board.length; i++) {
+    var c = board[i];
+    if (c.mine && !c.flagged && i !== hitIdx) {
+      // 从爆点向外交错翻开所有雷
+      var dc = Math.abs(i % cols - hc), dr = Math.abs(((i / cols) | 0) - hr);
+      c.revealed = true;
+      c.anim = 1;
+      c.delay = Math.max(dc, dr) * 0.05;
+    }
+    if (!c.mine && c.flagged) c.wrong = true; // 标记误旗
+  }
+  explodeAt((hc + 0.5) * CELL, (hr + 0.5) * CELL);
+  boomSound();
+  var sec = shownSec;
+  pendingOverlay = setTimeout(function () { pendingOverlay = null; showOverlay("lose", sec); }, 1100);
+}
+function win() {
+  state = "WIN";
+  timerOn = false;
+  cgGameplayStop();
+  cgHappy();
+  var sec = Math.max(1, Math.floor((Date.now() - startT) / 1000));
+  shownSec = sec;
+  updateTimeHUD(sec);
+  // 自动给剩余雷插旗
+  for (var i = 0; i < board.length; i++) {
+    var c = board[i];
+    if (c.mine && !c.flagged) { c.flagged = true; c.anim = 1; }
+  }
+  flagsUsed = totalMines;
+  updateMinesHUD();
+  var newBest = false;
+  if (!bests[diff] || sec < bests[diff]) { bests[diff] = sec; saveBest(diff, sec); newBest = true; }
+  updateBestHUD();
+  for (var g = 0; g < 5; g++) {
+    explodeAt(Math.random() * VW, Math.random() * VH * 0.7, "#ffd76a", "#6dff9e");
+  }
+  winSound();
+  pendingOverlay = setTimeout(function () { pendingOverlay = null; showOverlay("win", sec, newBest); }, 900);
+}
+
+// ---------- 粒子 ----------
+function addParticle(idx, color, n) {
+  var c = idx % cols, r = (idx / cols) | 0;
+  for (var i = 0; i < n; i++) {
+    particles.push({
+      x: (c + 0.5) * CELL, y: (r + 0.5) * CELL,
+      vx: (Math.random() - 0.5) * 50, vy: (Math.random() - 0.5) * 50 - 20,
+      life: 0.45, color: color, size: 2 + Math.random() * 2.5
+    });
+  }
+}
+function explodeAt(x, y, colA, colB) {
+  var palette = colA ? [colA, colB || "#fff"] : ["#ffd76a", "#ff8a5c", "#ff5470"];
+  for (var i = 0; i < 26; i++) {
+    var a = Math.random() * Math.PI * 2, s = 50 + Math.random() * 190;
+    particles.push({
+      x: x, y: y,
+      vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40,
+      life: 0.5 + Math.random() * 0.35,
+      color: palette[(Math.random() * palette.length) | 0],
+      size: 2 + Math.random() * 3.5
+    });
+  }
+}
+
+// ---------- 渲染 ----------
+function roundRect(c, x, y, w, h, rad) {
+  c.beginPath();
+  c.moveTo(x + rad, y);
+  c.arcTo(x + w, y, x + w, y + h, rad);
+  c.arcTo(x + w, y + h, x, y + h, rad);
+  c.arcTo(x, y + h, x, y, rad);
+  c.arcTo(x, y, x + w, y, rad);
+  c.closePath();
+}
+function drawCell(idx) {
+  var cell = board[idx];
+  var c = idx % cols, r = (idx / cols) | 0;
+  var x = c * CELL, y = r * CELL;
+  var rad = Math.max(2, CELL * 0.1);
+  var anim = cell.delay > 0 ? 0 : cell.anim;
+  if (!cell.revealed) {
+    // 隐藏格：霓虹棋盘格
+    var even = ((c + r) & 1) === 0;
+    ctx.fillStyle = even ? "#1c2548" : "#151c39";
+    roundRect(ctx, x + 1, y + 1, CELL - 2, CELL - 2, rad);
+    ctx.fill();
+    ctx.fillStyle = "rgba(150,175,255,0.07)";
+    ctx.fillRect(x + 2, y + 2, CELL - 4, 1.5);
+    if (cell.flagged) {
+      if (anim > 0) {
+        ctx.save();
+        ctx.translate(x + CELL / 2, y + CELL / 2);
+        ctx.scale(1 + 0.3 * anim, 1 + 0.3 * anim);
+        ctx.translate(-(x + CELL / 2), -(y + CELL / 2));
+        drawFlag(x, y);
+        ctx.restore();
+      } else drawFlag(x, y);
+    } else if (idx === hoverIdx && state === "PLAY") {
+      ctx.strokeStyle = "rgba(110,231,255,0.55)";
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = "#6ee7ff"; ctx.shadowBlur = 6;
+      roundRect(ctx, x + 2, y + 2, CELL - 4, CELL - 4, rad);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    return;
+  }
+  // 已翻开格
+  ctx.fillStyle = cell.boom ? "#52101f" : "#0d1128";
+  roundRect(ctx, x + 0.5, y + 0.5, CELL - 1, CELL - 1, rad);
+  ctx.fill();
+  if (anim > 0) {
+    ctx.save();
+    ctx.translate(x + CELL / 2, y + CELL / 2);
+    ctx.scale(1 + 0.24 * anim, 1 + 0.24 * anim);
+    ctx.translate(-(x + CELL / 2), -(y + CELL / 2));
+    ctx.globalAlpha = 1 - anim * 0.35;
+  }
+  if (cell.mine) {
+    drawMine(x, y, cell.boom);
+  } else if (cell.wrong) {
+    drawFlag(x, y);
+    drawCross(x, y);
+  } else if (cell.adj > 0) {
+    drawNumber(x, y, cell.adj);
+  }
+  if (anim > 0) { ctx.restore(); ctx.globalAlpha = 1; }
+}
+function drawNumber(x, y, n) {
+  var col = NUM_COLORS[n] || "#fff";
+  ctx.fillStyle = col;
+  ctx.font = "800 " + Math.round(CELL * 0.52) + "px -apple-system, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.shadowColor = col; ctx.shadowBlur = CELL * 0.2;
+  ctx.fillText(String(n), x + CELL / 2, y + CELL / 2 + CELL * 0.04);
+  ctx.shadowBlur = 0;
+}
+function drawMine(x, y, boom) {
+  var cx = x + CELL / 2, cy = y + CELL / 2, R = CELL * 0.28;
+  var col = boom ? "#ff5470" : "#8a9bff";
+  ctx.shadowColor = col; ctx.shadowBlur = CELL * 0.45;
+  var g = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.12, cx, cy, R);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.4, col);
+  g.addColorStop(1, boom ? "#7a1226" : "#232a52");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  // 尖刺
+  ctx.strokeStyle = col;
+  ctx.lineWidth = Math.max(1.2, CELL * 0.045);
+  ctx.beginPath();
+  for (var i = 0; i < 8; i++) {
+    var a = i * Math.PI / 4;
+    ctx.moveTo(cx + Math.cos(a) * R * 0.85, cy + Math.sin(a) * R * 0.85);
+    ctx.lineTo(cx + Math.cos(a) * R * 1.3, cy + Math.sin(a) * R * 1.3);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+function drawFlag(x, y) {
+  var cx = x + CELL / 2, cy = y + CELL / 2;
+  var s = CELL / 32;
+  ctx.shadowColor = "#ff5ec8"; ctx.shadowBlur = CELL * 0.3;
+  ctx.strokeStyle = "#e8ecff";
+  ctx.lineWidth = Math.max(1.5, 2 * s);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx - 4 * s, cy + 8 * s);
+  ctx.lineTo(cx - 4 * s, cy - 8 * s);
+  ctx.stroke();
+  ctx.fillStyle = "#ff5ec8";
+  ctx.beginPath();
+  ctx.moveTo(cx - 4 * s, cy - 8.5 * s);
+  ctx.lineTo(cx + 8 * s, cy - 4.5 * s);
+  ctx.lineTo(cx - 4 * s, cy - 0.5 * s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - 7.5 * s, cy + 9 * s);
+  ctx.lineTo(cx - 0.5 * s, cy + 9 * s);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.lineCap = "butt";
+}
+function drawCross(x, y) {
+  var pad = CELL * 0.24;
+  ctx.strokeStyle = "#ff4455";
+  ctx.lineWidth = Math.max(2, CELL * 0.09);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x + pad, y + pad);
+  ctx.lineTo(x + CELL - pad, y + CELL - pad);
+  ctx.moveTo(x + CELL - pad, y + pad);
+  ctx.lineTo(x + pad, y + CELL - pad);
+  ctx.stroke();
+  ctx.lineCap = "butt";
+}
+function drawParticles() {
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.2));
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+var last = 0;
+function frame(t) {
+  var dt = Math.min((t - last) / 1000, 0.05); last = t;
+  // 动画衰减（delay 为爆点交错延迟）
+  for (var i = 0; i < board.length; i++) {
+    var c = board[i];
+    if (c.delay > 0) c.delay -= dt;
+    else if (c.anim > 0) c.anim = Math.max(0, c.anim - dt * 4.5);
+  }
+  for (var p = particles.length - 1; p >= 0; p--) {
+    var pt = particles[p];
+    pt.life -= dt;
+    if (pt.life <= 0) { particles.splice(p, 1); continue; }
+    pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 260 * dt;
+  }
+  if (timerOn) {
+    var s = Math.floor((Date.now() - startT) / 1000);
+    if (s !== shownSec) { shownSec = s; updateTimeHUD(s); }
+  }
+  // 背景
+  var bg = ctx.createLinearGradient(0, 0, 0, VH);
+  bg.addColorStop(0, "#0c1024"); bg.addColorStop(1, "#080a16");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, VW, VH);
+  for (var ci = 0; ci < board.length; ci++) drawCell(ci);
+  drawParticles();
+  requestAnimationFrame(frame);
+}
+
+// ---------- 输入 ----------
+function idxFromPoint(clientX, clientY) {
+  var rect = canvas.getBoundingClientRect();
+  var x = (clientX - rect.left) / rect.width * VW;
+  var y = (clientY - rect.top) / rect.height * VH;
+  var c = Math.floor(x / CELL), r = Math.floor(y / CELL);
+  if (c < 0 || c >= cols || r < 0 || r >= rows) return -1;
+  return r * cols + c;
+}
+canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+canvas.addEventListener("mousemove", function (e) {
+  hoverIdx = state === "PLAY" ? idxFromPoint(e.clientX, e.clientY) : -1;
+});
+canvas.addEventListener("mouseleave", function () { hoverIdx = -1; });
+// 桌面：左键翻开 / 右键插旗，双击数字和弦
+var lastMouse = { idx: -1, t: 0 };
+canvas.addEventListener("mousedown", function (e) {
+  e.preventDefault();
+  ensureAudio();
+  if (state !== "PLAY") return;
+  var idx = idxFromPoint(e.clientX, e.clientY);
+  if (idx < 0) return;
+  if (e.button === 2) { toggleFlag(idx); return; }
+  if (e.button !== 0) return;
+  var now = Date.now();
+  if (lastMouse.idx === idx && now - lastMouse.t < DBL_TAP_MS) {
+    lastMouse.idx = -1;
+    doChord(idx);
+  } else {
+    lastMouse = { idx: idx, t: now };
+    if (mode === "flag") toggleFlag(idx);
+    else primaryReveal(idx);
+  }
+});
+// 移动端：点按翻开（或按模式插旗），长按 350ms 插旗，双触数字和弦
+var touch = { idx: -1, sx: 0, sy: 0, timer: null, longFired: false, moved: false };
+var lastTap = { idx: -1, t: 0 };
+canvas.addEventListener("touchstart", function (e) {
+  e.preventDefault();
+  ensureAudio();
+  hoverIdx = -1;
+  if (state !== "PLAY") return;
+  var t = e.changedTouches[0];
+  touch.idx = idxFromPoint(t.clientX, t.clientY);
+  touch.sx = t.clientX; touch.sy = t.clientY;
+  touch.longFired = false; touch.moved = false;
+  if (touch.idx < 0) return;
+  if (touch.timer) clearTimeout(touch.timer);
+  touch.timer = setTimeout(function () {
+    touch.timer = null;
+    if (touch.moved || touch.idx < 0 || state !== "PLAY") return;
+    touch.longFired = true;
+    toggleFlag(touch.idx);
+    try { if (navigator.vibrate) navigator.vibrate(35); } catch (err) {}
+  }, LONG_PRESS_MS);
+}, { passive: false });
+canvas.addEventListener("touchmove", function (e) {
+  e.preventDefault();
+  var t = e.changedTouches[0];
+  if (Math.abs(t.clientX - touch.sx) > SWIPE_CANCEL_PX || Math.abs(t.clientY - touch.sy) > SWIPE_CANCEL_PX) {
+    // 手指明显移动：取消长按，避免与滚动/滑动手势冲突
+    touch.moved = true;
+    if (touch.timer) { clearTimeout(touch.timer); touch.timer = null; }
+  }
+}, { passive: false });
+function onTouchEnd(e) {
+  e.preventDefault();
+  if (touch.timer) { clearTimeout(touch.timer); touch.timer = null; }
+  var idx = touch.idx;
+  var longFired = touch.longFired, moved = touch.moved;
+  touch.idx = -1; touch.longFired = false; touch.moved = false;
+  if (state !== "PLAY" || longFired || moved || idx < 0) return;
+  var now = Date.now();
+  if (lastTap.idx === idx && now - lastTap.t < DBL_TAP_MS) {
+    lastTap.idx = -1;
+    doChord(idx);
+  } else {
+    lastTap = { idx: idx, t: now };
+    if (mode === "flag") toggleFlag(idx);
+    else primaryReveal(idx);
+  }
+}
+canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+canvas.addEventListener("touchcancel", function () {
+  // 系统打断手势：完全清理，不触发任何棋盘操作
+  if (touch.timer) { clearTimeout(touch.timer); touch.timer = null; }
+  touch.idx = -1; touch.longFired = false; touch.moved = false;
+}, { passive: false });
+
+// ---------- 工具栏 ----------
+var diffBtns = document.querySelectorAll(".diffBtn");
+for (var db = 0; db < diffBtns.length; db++) {
+  (function (btn) {
+    btn.addEventListener("click", function () {
+      if (diff === btn.getAttribute("data-d")) { newGame(); return; }
+      diff = btn.getAttribute("data-d");
+      for (var i = 0; i < diffBtns.length; i++) diffBtns[i].classList.remove("active");
+      btn.classList.add("active");
+      newGame();
+    });
+  })(diffBtns[db]);
+}
+modeBtn.addEventListener("click", function () {
+  mode = mode === "dig" ? "flag" : "dig";
+  modeBtn.textContent = mode === "dig" ? "DIG" : "FLAG";
+  modeBtn.className = mode === "dig" ? "digMode" : "flagMode";
+});
+muteBtn.addEventListener("click", function () {
+  muted = !muted;
+  muteBtn.className = muted ? "off" : "";
+  saveMuted();
+  if (!muted) { ensureAudio(); beep(660, 0.08, "sine", 0.08); }
+});
+mainBtn.addEventListener("click", function (e) {
+  e.stopPropagation();
+  ensureAudio();
+  newGame();
+});
+
+// ---------- 启动 ----------
+loadBests();
+muteBtn.className = muted ? "off" : "";
+newGame();
+showOverlay("start");
+requestAnimationFrame(frame);
+// 调试/测试钩子（不影响游戏逻辑）
+window.__mh = {
+  makeBoard: makeBoard, neighborsOf: neighborsOf, placeMines: placeMines,
+  computeAdj: computeAdj, floodReveal: floodReveal, chordCell: chordCell, isWin: isWin,
+  DIFFS: DIFFS,
+  get board() { return board; }, get state() { return state; }, get diff() { return diff; }
+};
+</script>
+</body>
+</html>
